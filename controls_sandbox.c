@@ -12,11 +12,28 @@
 #define FIRE_RATE 6.0f 
 #define TRACE_LIFE 0.12f
 
+#define BULLET_SPEED 540.0f // pixels per second
+#define BULLET_LIFETIME 0.6f // bullet on screen time
+#define BULLET_RADIUS 3.0f // how big it is
+#define MAX_BULLETS 256 
+
+
 // struct to store shot effect (start point, end point and time to live)
 typedef struct {
     Vector2 a, b;     // line from A (player) to B (impact point = cursor)
     float   life;     // remaining lifetime (seconds)
 } ShotTrace;
+
+
+typedef struct {
+    Vector2 pos;
+    Vector2 vel;
+    float life;
+    int alive;
+} Bullet;
+
+static Bullet bullets[MAX_BULLETS];
+static int bulletCount = 0;
 
 #define MAX_TRACES 128
 
@@ -38,6 +55,43 @@ static void UpdateTraces(float dt) {
             // remove by swap
             traces[i] = traces[traceCount - 1];
             traceCount--;
+        }
+    }
+}
+
+static void AddBullet(Vector2 from, Vector2 to) {
+    if (bulletCount >= MAX_BULLETS) return;
+
+    // direction = normalized (to > from)
+    Vector2 dir = { to.x - from.x, to.y - from.y };
+    float len = sqrt(dir.x*dir.x + dir.y*dir.y);
+    if (len <= 0.0001f) return;
+    dir.x /= len; dir.y /= len;
+
+    bullets[bulletCount++] = (Bullet) {
+        .pos = from,
+        .vel = (Vector2){ dir.x * BULLET_SPEED, dir.y * BULLET_SPEED },
+        .life = BULLET_LIFETIME,
+        .alive = 1
+    };
+}
+
+static void UpdateBullets(float dt) {
+    for (int i = bulletCount - 1; i>= 0; --i) {
+        Bullet *b = &bullets[i];
+        if (!b->alive) continue;
+
+        // integrate
+        b->pos.x += b->vel.x * dt;
+        b->pos.y += b->vel.y * dt;
+        b->life   -= dt;
+
+        // kill if expired or off-screen
+        if (b->life <= 0.0f ||
+            b->pos.x < -20 || b->pos.x > SCREEN_W + 20 ||
+            b->pos.y < -20 || b->pos.y > SCREEN_H + 20) {
+                bullets[i] = bullets[bulletCount - 1];
+                bulletCount--;
         }
     }
 }
@@ -88,6 +142,7 @@ int main(void) {
         bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
         if (wantsFire && fireCooldown <= 0.0f) {
             AddTrace(player, mouse);
+            AddBullet(player, mouse);
             shakeTime = 0.06f;                 // tiny bump of juice
             fireCooldown = 1.0f / FIRE_RATE;   // reset cooldown
         }
@@ -95,6 +150,7 @@ int main(void) {
 
         // update
         UpdateTraces(dt);
+        UpdateBullets(dt);
         if (shakeTime > 0.0f) shakeTime -= dt;
 
         // camera shake offset (just for flavor)
@@ -122,6 +178,11 @@ int main(void) {
                 DrawLineEx(A, B, thickness, WHITE);
                 // small muzzle flash
                 DrawCircleV(A, 4.0f * t + 1.0f, WHITE);
+            }
+
+            for (int i = 0; i < bulletCount; ++i) {
+                Vector2 p = { bullets[i].pos.x + cam.x, bullets[i].pos.y + cam.y };
+                DrawCircleV(p, BULLET_RADIUS, WHITE);
             }
 
             // player (center)
