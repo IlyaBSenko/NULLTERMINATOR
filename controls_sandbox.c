@@ -3,12 +3,14 @@
 // No enemies yet—just visual feedback for input.
 // mac build: gcc controls_sandbox.c -o null_controls -O2 -Wall -std=c99 -lraylib -lm
 
-#include "raylib.h"
-#include <math.h>
+#include "raylib.h" // library for game functions
+#include <math.h>   
 
+// screen size constants
 #define SCREEN_W 960
 #define SCREEN_H 540
 
+// struct to store shot effect (start point, end point and time to live)
 typedef struct {
     Vector2 a, b;     // line from A (player) to B (impact point = cursor)
     float   life;     // remaining lifetime (seconds)
@@ -16,14 +18,17 @@ typedef struct {
 
 #define MAX_TRACES 128
 
-static ShotTrace traces[MAX_TRACES];
-static int traceCount = 0;
+static ShotTrace traces[MAX_TRACES];  
+static int traceCount = 0;            // how many are alive in array
 
+
+// helper function to add traces
 static void AddTrace(Vector2 a, Vector2 b) {
     if (traceCount >= MAX_TRACES) return;
     traces[traceCount++] = (ShotTrace){ a, b, 0.12f }; // short-lived flash
 }
 
+// helper to update and remove expired traces
 static void UpdateTraces(float dt) {
     for (int i = traceCount - 1; i >= 0; --i) {
         traces[i].life -= dt;
@@ -35,6 +40,7 @@ static void UpdateTraces(float dt) {
     }
 }
 
+// function to draw crosshair (custom)
 static void DrawCrosshair(Vector2 p) {
     // simple 1-bit crosshair (no system cursor)
     const int arm = 8;
@@ -46,8 +52,11 @@ static void DrawCrosshair(Vector2 p) {
     DrawCircleV(p, 1.5f, WHITE);
 }
 
+/**
+ * request anti aliasing and vsync before opening window
+ */
 int main(void) {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT); 
     InitWindow(SCREEN_W, SCREEN_H, "NULL TERMINATOR — Controls Sandbox");
     SetTargetFPS(60);
 
@@ -57,10 +66,11 @@ int main(void) {
     // hide the OS cursor; we’ll draw our own crosshair
     HideCursor();
 
-    // minimal screenshake on click (for feel)
+    // minimal screen shake on click (for feel)
     float shakeTime = 0.0f;
     float shakeMag  = 4.0f;
 
+    // game loop
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
 
