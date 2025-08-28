@@ -6,9 +6,11 @@
 #include "raylib.h" // library for game functions
 #include <math.h>   
 
-// screen size constants
 #define SCREEN_W 960
 #define SCREEN_H 540
+
+#define FIRE_RATE 6.0f 
+#define TRACE_LIFE 0.12f
 
 // struct to store shot effect (start point, end point and time to live)
 typedef struct {
@@ -70,6 +72,8 @@ int main(void) {
     float shakeTime = 0.0f;
     float shakeMag  = 4.0f;
 
+    float fireCooldown = 0.0f; // seconds until we can fire again
+
     // game loop
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -77,11 +81,17 @@ int main(void) {
         // input
         Vector2 mouse = GetMousePosition();
 
-        bool fired = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE);
-        if (fired) {
+        // tick down cooldown
+        if (fireCooldown > 0.0f) fireCooldown -= dt;
+
+        // hold to fire at a fixed rate
+        bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
+        if (wantsFire && fireCooldown <= 0.0f) {
             AddTrace(player, mouse);
-            shakeTime = 0.06f; // tiny bump of juice
+            shakeTime = 0.06f;                 // tiny bump of juice
+            fireCooldown = 1.0f / FIRE_RATE;   // reset cooldown
         }
+
 
         // update
         UpdateTraces(dt);
