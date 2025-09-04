@@ -16,7 +16,7 @@
 #define BULLET_RADIUS 3.0f // how big it is
 #define MAX_BULLETS 256 
 
-#define ENEMY_SPEED 85.0f // pixels/sec
+// #define ENEMY_SPEED 85.0f // pixels/sec
 #define ENEMY_RADIUS 8.0f
 #define MAX_ENEMIES 256
 #define ENEMY_SPAWN_INTERVAL 1.0f // spawn one per sec (fix later)
@@ -29,6 +29,15 @@
 // hearts UI layout
 #define HEART_SIZE 18.0f      // logical size for drawing
 #define HEART_GAP  10         // pixels between hearts
+
+// dificulty ramp (time based)
+#define SPAWN_BASE 1.00f // seconds between spawns at t=0
+#define SPAWN_MIN 0.20f // fastest allowed (for now heeheehee)
+#define SPAWN_RAMP 0.015f // how much to subract per second on linear approach
+
+#define ENEMY_SPEED_BASE 85.0f // starting speed, was ENEMY_SPEED
+#define ENEMY_SPEED_MAX 220.f // limit, no cap aye
+#define ENEMY_SPEED_RAMP 0.60f // +speed per second, 36 per minute bruh
 
 
 
@@ -108,7 +117,6 @@ static void UpdateBullets(float dt) {
         Bullet *b = &bullets[i];
         if (!b->alive) continue;
 
-        // integrate
         b->pos.x += b->vel.x * dt;
         b->pos.y += b->vel.y * dt;
         b->life   -= dt;
@@ -123,9 +131,7 @@ static void UpdateBullets(float dt) {
     }
 }
 
-// function to draw crosshair (custom)
 static void DrawCrosshair(Vector2 p) {
-    // simple 1-bit crosshair (no system cursor)
     const int arm = 8;
     const int gap = 4;
     DrawLineEx((Vector2){p.x - (gap+arm), p.y}, (Vector2){p.x - gap, p.y}, 2.0f, WHITE);
@@ -135,33 +141,31 @@ static void DrawCrosshair(Vector2 p) {
     DrawCircleV(p, 1.5f, WHITE);
 }
 
-static void AddEnemy(Vector2 player) {
+static void AddEnemy(Vector2 player, float speed) {
     if (enemyCount >= MAX_ENEMIES) return;
 
     int side = GetRandomValue(0, 3);
-    Vector2 p ={0};
+    Vector2 p = {0};
 
     switch (side) {
-        case 0: p.x = -10;               p.y = GetRandomValue(0, SCREEN_H); break;        // left
-        case 1: p.x = SCREEN_W + 10;     p.y = GetRandomValue(0, SCREEN_H); break;        // right
-        case 2: p.x = GetRandomValue(0, SCREEN_W); p.y = -10;             break;          // top
-        case 3: p.x = GetRandomValue(0, SCREEN_W); p.y = SCREEN_H + 10;   break;          // bottom
+        case 0: p.x = -10;               p.y = GetRandomValue(0, SCREEN_H); break;
+        case 1: p.x = SCREEN_W + 10;     p.y = GetRandomValue(0, SCREEN_H); break;
+        case 2: p.x = GetRandomValue(0, SCREEN_W); p.y = -10;               break;
+        case 3: p.x = GetRandomValue(0, SCREEN_W); p.y = SCREEN_H + 10;     break;
     }
 
-    // velocity points toward the player
-    Vector2 dir = { player.x - p.x, player.y - p.y };
+    Vector2 dir = (Vector2){ player.x - p.x, player.y - p.y };
     float len = sqrtf(dir.x*dir.x + dir.y*dir.y);
     if (len < 0.0001f) len = 0.0001f;
     dir.x /= len; dir.y /= len;
 
     enemies[enemyCount++] = (Enemy){
         .pos = p,
-        .vel = (Vector2){ dir.x * ENEMY_SPEED, dir.y * ENEMY_SPEED },
+        .vel = (Vector2){ dir.x * speed, dir.y * speed },  
         .alive = 1
     };
-
-    // they spawn just off screen so they drift in clearly
 }
+
 
 static void UpdateEnemies(float dt) {
     for (int i = enemyCount - 1; i >= 0; --i) {
@@ -171,7 +175,6 @@ static void UpdateEnemies(float dt) {
         e->pos.x += e->vel.x * dt;
         e->pos.y += e->vel.y * dt;
 
-        // optional: if somehow far off-screen, remove
         if (e->pos.x < -50 || e->pos.x > SCREEN_W + 50 ||
             e->pos.y < -50 || e->pos.y > SCREEN_H + 50) {
             enemies[i] = enemies[enemyCount - 1];
@@ -185,7 +188,7 @@ static float Dist2(Vector2 a, Vector2 b) {
     return dx*dx + dy*dy;
 }
 
-// --- Hearts (clean 1-bit silhouette) ---
+// HEARTS / FIX LATER
 
 // Filled heart: two lobes + wide body triangle + small V-notch at top.
 static void DrawHeartFilled(Vector2 p, float s) {
@@ -254,19 +257,19 @@ int main(void) {
     InitWindow(SCREEN_W, SCREEN_H, "NULL TERMINATOR — Controls Sandbox");
     SetTargetFPS(60);
 
-    // lock the “player” at center for now
+    // lock the “player” at center for now, will upgrade later
     Vector2 player = { SCREEN_W * 0.5f, SCREEN_H * 0.5f };
 
-    // hide the OS cursor; we’ll draw our own crosshair
     HideCursor();
 
     int score = 0;
+    float timeSinceStart = 0.0f;
 
-    // minimal screen shake on click (for feel)
+    // minimal screen shake on click (for vibbbeeessss)
     float shakeTime = 0.0f;
     float shakeMag  = 4.0f;
 
-    float fireCooldown = 0.0f; // seconds until we can fire again
+    float fireCooldown = 0.0f; 
 
     float spawnTimer = 0.0f;
 
@@ -278,7 +281,6 @@ int main(void) {
     // game loop
     while (!WindowShouldClose()) {
 
-        // --- begin frame ---
         float dt = GetFrameTime();
         Vector2 mouse = GetMousePosition();
 
@@ -300,14 +302,25 @@ int main(void) {
             UpdateBullets(dt);
             if (shakeTime > 0.0f) shakeTime -= dt;
 
+            timeSinceStart += dt;
+
+            // spawn gets faster over time (linear, clamped)
+            float currentSpawnInterval = SPAWN_BASE - SPAWN_RAMP * timeSinceStart;
+            if (currentSpawnInterval < SPAWN_MIN) currentSpawnInterval = SPAWN_MIN;
+
+            // enemies get faster over time (linear, clamped)
+            float currentEnemySpeed = ENEMY_SPEED_BASE + ENEMY_SPEED_RAMP * timeSinceStart;
+            if (currentEnemySpeed > ENEMY_SPEED_MAX) currentEnemySpeed = ENEMY_SPEED_MAX;
+
+
             // spawn
             spawnTimer -= dt;
             if (spawnTimer <= 0.0f) {
-                AddEnemy(player);
-                spawnTimer = ENEMY_SPAWN_INTERVAL;
+                AddEnemy(player, currentEnemySpeed);
+                spawnTimer = currentSpawnInterval;
             }
 
-            // bullet → enemy
+            // bullet to enemy
             for (int ei = enemyCount - 1; ei >= 0; --ei) {
                 Enemy *e = &enemies[ei];
                 float killRadius = ENEMY_RADIUS + BULLET_RADIUS;
@@ -322,7 +335,7 @@ int main(void) {
                 }
             }
 
-            // enemy → player
+            // enemy to player
             if (hurtTimer > 0.0f) hurtTimer -= dt;
             for (int ei = enemyCount - 1; ei >= 0; --ei) {
                 Enemy *e = &enemies[ei];
@@ -340,7 +353,8 @@ int main(void) {
 
             UpdateEnemies(dt);
 
-        } else { // STATE_GAME_OVER
+        // STATE_GAME_OVER
+        } else { 
             if (IsKeyPressed(KEY_R)) {
                 // reset run
                 score = 0;
@@ -349,17 +363,18 @@ int main(void) {
                 shakeTime = 0.0f;
                 fireCooldown = 0.0f;
                 spawnTimer = 0.0f;
+                timeSinceStart = 0.0f;
 
                 enemyCount = 0;
                 bulletCount = 0;
                 traceCount  = 0;
 
-                state = STATE_PLAYING;   // <-- don't forget to return to playing
+                state = STATE_PLAYING;   
             }
         }
 
 
-        // camera shake offset (just for flavor)
+        // camera shake offset (no real reason, just tuff)
         Vector2 cam = {0};
         if (shakeTime > 0.0f) {
             cam.x = (GetRandomValue(-100, 100) / 100.0f) * shakeMag;
@@ -372,8 +387,8 @@ int main(void) {
 
             // draw traces
             for (int i = 0; i < traceCount; ++i) {
-                float t = traces[i].life / TRACE_LIFE; // 1→0
-                float thickness = 3.0f * t + 1.0f; // start thicker
+                float t = traces[i].life / TRACE_LIFE; // 1 to 0
+                float thickness = 3.0f * t + 1.0f; // start thicker, pause
                 // apply camera offset
                 Vector2 A = (Vector2){ traces[i].a.x + cam.x, traces[i].a.y + cam.y };
                 Vector2 B = (Vector2){ traces[i].b.x + cam.x, traces[i].b.y + cam.y };
@@ -387,7 +402,7 @@ int main(void) {
                 DrawCircleV(p, BULLET_RADIUS, WHITE);
             }
 
-            // draw enemies (apply camera shake)
+            // draw enemies with camera shake
             for (int i = 0; i < enemyCount; ++i) {
                 Vector2 p = { enemies[i].pos.x + cam.x, enemies[i].pos.y + cam.y };
                 DrawCircleV(p, ENEMY_RADIUS, WHITE);
@@ -395,14 +410,13 @@ int main(void) {
 
             
 
-            // === Hearts under score (top-right) ===
+            // HEARTS TOP RIGHT (FIX LATER)
             const char *scoreText = TextFormat("Score: %d", score);
             int fontSize = 18;
             int scoreWidth = MeasureText(scoreText, fontSize);
             int scoreX = SCREEN_W - scoreWidth - 16;
             int scoreY = 12;
 
-            // re-draw score using the vars (if you haven't already)
             DrawText(scoreText, scoreX, scoreY, fontSize, WHITE);
 
             // hearts row, aligned to the right edge under the score
@@ -420,13 +434,11 @@ int main(void) {
 
             DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
 
-            // player (center)
             // player (center) — flash while hurt
             Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
             DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS, playerColor);
             DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS - 2, BLACK);
 
-            // draw crosshair at actual mouse (no shake on UI)
             DrawCrosshair(mouse);
 
             if (state == STATE_GAME_OVER) {
