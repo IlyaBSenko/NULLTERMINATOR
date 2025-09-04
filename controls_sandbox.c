@@ -1,6 +1,5 @@
 // NULL TERMINATOR — Controls Sandbox (C + raylib)
 // Aim with mouse/trackpad, custom crosshair, click to "fire".
-// No enemies yet—just visual feedback for input.
 // mac build: gcc controls_sandbox.c -o null_controls -O2 -Wall -std=c99 -lraylib -lm
 
 #include "raylib.h" // library for game functions
@@ -52,6 +51,8 @@ typedef struct {
     Vector2 vel;
     int alive;
 } Enemy;
+
+typedef enum { STATE_PLAYING = 0, STATE_GAME_OVER = 1 } GameState;
 
 static Enemy enemies[MAX_ENEMIES];
 static int enemyCount = 0;
@@ -272,90 +273,90 @@ int main(void) {
     int hp = HP_MAX;
     float hurtTimer = 0;
 
+    GameState state = STATE_PLAYING;
+
     // game loop
     while (!WindowShouldClose()) {
-        float dt = GetFrameTime();
 
-        // input
+        // --- begin frame ---
+        float dt = GetFrameTime();
         Vector2 mouse = GetMousePosition();
 
-        // tick down cooldown
-        if (fireCooldown > 0.0f) fireCooldown -= dt;
+        if (state == STATE_PLAYING) {
+            // cooldown tick
+            if (fireCooldown > 0.0f) fireCooldown -= dt;
 
-        // hold to fire at a fixed rate
-        bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
-        if (wantsFire && fireCooldown <= 0.0f) {
-            AddTrace(player, mouse);
-            AddBullet(player, mouse);
-            shakeTime = 0.06f;                 // tiny bump of juice
-            fireCooldown = 1.0f / FIRE_RATE;   // reset cooldown
-        }
+            // hold to fire at a fixed rate
+            bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
+            if (wantsFire && fireCooldown <= 0.0f) {
+                AddTrace(player, mouse);
+                AddBullet(player, mouse);
+                shakeTime = 0.06f;
+                fireCooldown = 1.0f / FIRE_RATE;
+            }
 
+            // updates
+            UpdateTraces(dt);
+            UpdateBullets(dt);
+            if (shakeTime > 0.0f) shakeTime -= dt;
 
-        // update
-        UpdateTraces(dt);
-        UpdateBullets(dt);
-        if (shakeTime > 0.0f) shakeTime -= dt;
+            // spawn
+            spawnTimer -= dt;
+            if (spawnTimer <= 0.0f) {
+                AddEnemy(player);
+                spawnTimer = ENEMY_SPAWN_INTERVAL;
+            }
 
-        // spawn logic: every ENEMY_SPAWN_INTERVAL seconds
-        spawnTimer -= dt;
-        if (spawnTimer <= 0.0f) {
-            AddEnemy(player);
-            spawnTimer = ENEMY_SPAWN_INTERVAL;
-        }
-
-        // bullet-enemy collisions (circle vs circle)
-        for (int ei = enemyCount - 1; ei >= 0; --ei) {
-            Enemy *e = &enemies[ei];
-            float killRadius = ENEMY_RADIUS + BULLET_RADIUS;
-
-            for (int bi = bulletCount - 1; bi >= 0; --bi) {
-                Bullet *b = &bullets[bi];
-                if (Dist2(e->pos, b->pos) <= killRadius * killRadius) {
-                    // remove enemy
-                    enemies[ei] = enemies[enemyCount - 1];
-                    enemyCount--;
-
-                    // remove bullet
-                    bullets[bi] = bullets[bulletCount - 1];
-                    bulletCount--;
-
-                    // tiny feedback
-                    shakeTime = 0.06f;
-                    score += 10;
-
-                    break; // enemy gone; stop checking more bullets for this enemy
+            // bullet → enemy
+            for (int ei = enemyCount - 1; ei >= 0; --ei) {
+                Enemy *e = &enemies[ei];
+                float killRadius = ENEMY_RADIUS + BULLET_RADIUS;
+                for (int bi = bulletCount - 1; bi >= 0; --bi) {
+                    Bullet *b = &bullets[bi];
+                    if (Dist2(e->pos, b->pos) <= killRadius * killRadius) {
+                        enemies[ei] = enemies[enemyCount - 1]; enemyCount--;
+                        bullets[bi] = bullets[bulletCount - 1]; bulletCount--;
+                        shakeTime = 0.06f; score += 10;
+                        break;
+                    }
                 }
             }
-        }
 
-        // player-enemy collisions (take damage on contact)
-        if (hurtTimer > 0.0f) hurtTimer -= dt;
-
-        for (int ei = enemyCount - 1; ei >= 0; --ei) {
-            Enemy *e = &enemies[ei];
-            float touchRadius = ENEMY_RADIUS + PLAYER_RADIUS;
-
-            if (Dist2(e->pos, player) <= touchRadius * touchRadius) {
-                if (hurtTimer <= 0.0f) {
-                    // apply damage: one "hit" = crack or break a heart
-                    if (hp > 0) hp -= 1;
-                    hurtTimer = HIT_IFRAME;
-
-                    // feedback
-                    shakeTime = 0.12f;
+            // enemy → player
+            if (hurtTimer > 0.0f) hurtTimer -= dt;
+            for (int ei = enemyCount - 1; ei >= 0; --ei) {
+                Enemy *e = &enemies[ei];
+                float touchRadius = ENEMY_RADIUS + PLAYER_RADIUS;
+                if (Dist2(e->pos, player) <= touchRadius * touchRadius) {
+                    if (hurtTimer <= 0.0f) {
+                        if (hp > 0) hp -= 1;
+                        if (hp <= 0) { state = STATE_GAME_OVER; }
+                        hurtTimer = HIT_IFRAME;
+                        shakeTime = 0.12f;
+                    }
+                    enemies[ei] = enemies[enemyCount - 1]; enemyCount--;
                 }
+            }
 
-                // remove this enemy so it doesn't keep sitting on you
-                enemies[ei] = enemies[enemyCount - 1];
-                enemyCount--;
+            UpdateEnemies(dt);
+
+        } else { // STATE_GAME_OVER
+            if (IsKeyPressed(KEY_R)) {
+                // reset run
+                score = 0;
+                hp = HP_MAX;
+                hurtTimer = 0.0f;
+                shakeTime = 0.0f;
+                fireCooldown = 0.0f;
+                spawnTimer = 0.0f;
+
+                enemyCount = 0;
+                bulletCount = 0;
+                traceCount  = 0;
+
+                state = STATE_PLAYING;   // <-- don't forget to return to playing
             }
         }
-
-
-
-        // move enemies
-        UpdateEnemies(dt);
 
 
         // camera shake offset (just for flavor)
@@ -369,13 +370,9 @@ int main(void) {
         BeginDrawing();
             ClearBackground(BLACK);
 
-            // arena bounds (we’ll replace later)
-            // Rectangle arena = { 24 + cam.x, 24 + cam.y, SCREEN_W - 48, SCREEN_H - 48 };
-            // DrawRectangleLinesEx(arena, 2.0f, WHITE);
-
             // draw traces
             for (int i = 0; i < traceCount; ++i) {
-                float t = traces[i].life / 0.12f; // 1→0
+                float t = traces[i].life / TRACE_LIFE; // 1→0
                 float thickness = 3.0f * t + 1.0f; // start thicker
                 // apply camera offset
                 Vector2 A = (Vector2){ traces[i].a.x + cam.x, traces[i].a.y + cam.y };
@@ -429,6 +426,24 @@ int main(void) {
 
             // draw crosshair at actual mouse (no shake on UI)
             DrawCrosshair(mouse);
+
+            if (state == STATE_GAME_OVER) {
+            // OPTIONAL MAY REMOVE LATER - dim the screen a bit 
+            DrawRectangle(0, 0, SCREEN_W, SCREEN_H, Fade(BLACK, 0.35f));
+
+            // main message
+            const char *title = "PROCESS TERMINATED";
+            int titleSize = 36;
+            int titleW = MeasureText(title, titleSize);
+            DrawText(title, (SCREEN_W - titleW)/2, SCREEN_H/2 - 40, titleSize, WHITE);
+
+            // subtext with score + prompt
+            const char *sub = TextFormat("Score: %d   -   Press R to restart", score);
+            int subSize = 20;
+            int subW = MeasureText(sub, subSize);
+            DrawText(sub, (SCREEN_W - subW)/2, SCREEN_H/2 + 6, subSize, WHITE);
+        }
+
 
             
         EndDrawing();
