@@ -418,6 +418,8 @@ int main(void) {
                 DrawHeartIcon(center, s, state);
             }
 
+            DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
+
             // player (center)
             // player (center) — flash while hurt
             Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
