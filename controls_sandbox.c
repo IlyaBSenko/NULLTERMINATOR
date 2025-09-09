@@ -315,6 +315,9 @@ int main(void) {
 
     int score = 0;
     int highScore = 0;
+    bool newHighBanner = false;
+    float newHighTimer = 0.0f;
+
     float timeSinceStart = 0.0f;
     highScore = LoadHighScore(HS_FILE);
 
@@ -340,6 +343,8 @@ int main(void) {
 
         float dt = GetFrameTime();
         Vector2 mouse = GetMousePosition();
+
+        if (newHighTimer > 0.0f) newHighTimer -= dt;
 
         if (state == STATE_PLAYING) {
             // cooldown tick
@@ -409,26 +414,38 @@ int main(void) {
             }
 
             // enemy to player
+            // enemy to player
             if (hurtTimer > 0.0f) hurtTimer -= dt;
+
             for (int ei = enemyCount - 1; ei >= 0; --ei) {
                 Enemy *e = &enemies[ei];
                 float touchRadius = ENEMY_RADIUS + PLAYER_RADIUS;
+
                 if (Dist2(e->pos, player) <= touchRadius * touchRadius) {
                     if (hurtTimer <= 0.0f) {
                         if (hp > 0) hp -= 1;
+
                         if (hp <= 0) {
-                            state = STATE_GAME_OVER;
+                            // GAME OVER: update high score once + show banner
                             if (score > highScore) {
                                 highScore = score;
                                 SaveHighScore(HS_FILE, highScore);
+                                newHighBanner = true;
+                                newHighTimer  = 2.0f;   // 2 seconds
                             }
+                            state = STATE_GAME_OVER;
                         }
 
+                        // feedback + i-frames
                         hurtTimer = HIT_IFRAME;
                         shakeTime = 0.12f;
                     }
-                    enemies[ei] = enemies[enemyCount - 1]; enemyCount--;
+
+                    // remove this enemy either way
+                    enemies[ei] = enemies[enemyCount - 1];
+                    enemyCount--;
                 }
+            
             }
 
             UpdateEnemies(dt);
@@ -451,6 +468,8 @@ int main(void) {
                 hasShotgun = false;
                 justUnlockedShotgun = false;
                 shotgunBannerTimer = 0.0f;
+                newHighBanner = false;
+                newHighTimer = 0.0f;
 
                 state = STATE_PLAYING;   
             }
@@ -564,6 +583,31 @@ int main(void) {
             int subW = MeasureText(sub, subSize);
             DrawText(sub, (SCREEN_W - subW)/2, SCREEN_H/2 + 6, subSize, WHITE);
         }
+
+        // === NEW HIGH SCORE banner ===
+        if (newHighBanner || newHighTimer > 0.0f) {
+            const float duration = 2.0f;                   // must match the start value
+            float a = newHighTimer / duration;             // 0..1 as it counts down
+            if (a < 0.0f) a = 0.0f; if (a > 1.0f) a = 1.0f;
+
+            // ease: fade in first 20%, hold, fade out last 20%
+            float alpha = (a < 0.2f) ? (a / 0.2f)
+                        : (a > 0.8f) ? ((1.0f - a) / 0.2f)
+                        : 1.0f;
+
+            const char *msg = "NEW HIGH SCORE!";
+            int fs = 32;
+            int w  = MeasureText(msg, fs);
+
+            // put it a bit below the top-center; add a subtle drop-shadow
+            int x = (SCREEN_W - w)/2;
+            int y = 120;
+            DrawText(msg, x+2, y+2, fs, Fade(BLACK, alpha));  // shadow
+            DrawText(msg, x,   y,   fs, Fade(WHITE, alpha));
+
+            if (newHighTimer <= 0.0f) newHighBanner = false;
+        }
+
 
 
             
