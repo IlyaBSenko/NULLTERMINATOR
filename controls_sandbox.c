@@ -4,6 +4,27 @@
 
 #include "raylib.h" // library for game functions
 #include <math.h>   
+#include <stdio.h> 
+
+// high score
+static const char *HS_FILE = "highscore.txt";
+static int LoadHighScore(const char *path) {
+    int hs = 0;
+    FILE *f = fopen(path, "r");
+    if (f) {
+        if (fscanf(f, "%d", &hs) != 1) hs = 0;
+        fclose(f);
+    }
+    return hs;
+}
+
+static void SaveHighScore(const char *path, int hs) {
+    FILE *f = fopen(path, "w");
+    if (f) {
+        fprintf(f, "%d\n", hs);
+        fclose(f);
+    }
+}
 
 // screen
 #define SCREEN_W 960
@@ -293,7 +314,9 @@ int main(void) {
     HideCursor();
 
     int score = 0;
+    int highScore = 0;
     float timeSinceStart = 0.0f;
+    highScore = LoadHighScore(HS_FILE);
 
     // minimal screen shake on click (for vibbbeeessss)
     float shakeTime = 0.0f;
@@ -393,7 +416,14 @@ int main(void) {
                 if (Dist2(e->pos, player) <= touchRadius * touchRadius) {
                     if (hurtTimer <= 0.0f) {
                         if (hp > 0) hp -= 1;
-                        if (hp <= 0) { state = STATE_GAME_OVER; }
+                        if (hp <= 0) {
+                            state = STATE_GAME_OVER;
+                            if (score > highScore) {
+                                highScore = score;
+                                SaveHighScore(HS_FILE, highScore);
+                            }
+                        }
+
                         hurtTimer = HIT_IFRAME;
                         shakeTime = 0.12f;
                     }
@@ -486,6 +516,8 @@ int main(void) {
             }
 
             DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
+            DrawText(TextFormat("Best: %d", highScore), 16, 34, 18, WHITE);
+
 
             // Upgrade banner 
             if (shotgunBannerTimer > 0.0f || justUnlockedShotgun) {
