@@ -5,12 +5,15 @@
 #include "raylib.h" // library for game functions
 #include <math.h>   
 
+// screen
 #define SCREEN_W 960
 #define SCREEN_H 540
 
+// starter pistol
 #define FIRE_RATE 6.0f 
 #define TRACE_LIFE 0.12f
 
+// starter pistol bullets
 #define BULLET_SPEED 540.0f // pixels per second
 #define BULLET_LIFETIME 0.6f // bullet on screen time
 #define BULLET_RADIUS 3.0f // how big it is
@@ -35,9 +38,16 @@
 #define SPAWN_MIN 0.20f // fastest allowed (for now heeheehee)
 #define SPAWN_RAMP 0.015f // how much to subract per second on linear approach
 
+// difficulty ramper
 #define ENEMY_SPEED_BASE 85.0f // starting speed, was ENEMY_SPEED
 #define ENEMY_SPEED_MAX 220.f // limit, no cap aye
 #define ENEMY_SPEED_RAMP 0.60f // +speed per second, 36 per minute bruh
+
+// shotgun stats
+#define SHOTGUN_UNLOCK_AFTER_SCORE 500
+#define SHOTGUN_PELLETS 5
+#define SHOTGUN_SPREAD_DEG 18.0f // around 18 degreees spread each slide
+#define SHOTGUN_FIRE_RATE 2.8f
 
 
 
@@ -246,7 +256,27 @@ static int HeartStateFromHP(int hp, int i) {
     return 2;                  // broken
 }
 
+// shotgun helper
+static void FireShotgun(Vector2 from, Vector2 to) {
+    float dx = to.x - from.x;
+    float dy = to.y - from.y;
+    float base = atan2f(dy, dx);
 
+    float spread = SHOTGUN_SPREAD_DEG * (PI/180.0f);
+    int n = SHOTGUN_PELLETS;
+
+    for (int i = 0; i <n; ++i) {
+        float t = (n == 1) ? 0.0f : (float)i/(float)(n-1);      // 0..1
+        float ang = base + (t - 0.5f) * 2.0f * spread;          // center→edges
+        Vector2 dirPoint = (Vector2){ from.x + cosf(ang), from.y + sinf(ang) };
+        AddBullet(from, dirPoint);                              // your AddBullet normalizes
+    }
+
+    // draw one bright center trace for feedback
+    Vector2 centerPoint = (Vector2){ from.x + cosf(base), from.y + sinf(base) };
+    AddTrace(from, centerPoint);
+    
+}
 
 
 /**
@@ -278,6 +308,8 @@ int main(void) {
 
     GameState state = STATE_PLAYING;
 
+    bool hasShotgun = false;
+
     // game loop
     while (!WindowShouldClose()) {
 
@@ -288,14 +320,25 @@ int main(void) {
             // cooldown tick
             if (fireCooldown > 0.0f) fireCooldown -= dt;
 
-            // hold to fire at a fixed rate
+            // upgrade unlock
+            if (!hasShotgun && score >= SHOTGUN_UNLOCK_AFTER_SCORE) {
+                hasShotgun = true;
+                shakeTime = 0.08f; // feedback bump
+            }
+
             bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
             if (wantsFire && fireCooldown <= 0.0f) {
-                AddTrace(player, mouse);
-                AddBullet(player, mouse);
+                if (hasShotgun) {
+                    FireShotgun(player, mouse);
+                    fireCooldown = 1.0f / SHOTGUN_FIRE_RATE;
+                } else {
+                    AddTrace(player, mouse);
+                    AddBullet(player, mouse);
+                    fireCooldown = 1.0f / FIRE_RATE;
+                }
                 shakeTime = 0.06f;
-                fireCooldown = 1.0f / FIRE_RATE;
             }
+
 
             // updates
             UpdateTraces(dt);
@@ -368,6 +411,7 @@ int main(void) {
                 enemyCount = 0;
                 bulletCount = 0;
                 traceCount  = 0;
+                hasShotgun = false;
 
                 state = STATE_PLAYING;   
             }
