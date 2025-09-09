@@ -516,7 +516,7 @@ int main(void) {
             }
 
             DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
-            DrawText(TextFormat("Best: %d", highScore), 16, 34, 18, WHITE);
+            DrawText(TextFormat("High Score: %d", highScore), 16, 34, 18, WHITE);
 
 
             // Upgrade banner 
