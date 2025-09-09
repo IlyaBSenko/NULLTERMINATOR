@@ -309,6 +309,8 @@ int main(void) {
     GameState state = STATE_PLAYING;
 
     bool hasShotgun = false;
+    bool justUnlockedShotgun = false;
+    float shotgunBannerTimer = 0.0f;
 
     // game loop
     while (!WindowShouldClose()) {
@@ -323,8 +325,13 @@ int main(void) {
             // upgrade unlock
             if (!hasShotgun && score >= SHOTGUN_UNLOCK_AFTER_SCORE) {
                 hasShotgun = true;
-                shakeTime = 0.08f; // feedback bump
+                justUnlockedShotgun = true;
+                shotgunBannerTimer  = 2;   // show for ~1.5 seconds
+                shakeTime = 0.08f; // tiny feedback bump 
             }
+
+            if (shotgunBannerTimer > 0.0f) shotgunBannerTimer -= dt;
+
 
             bool wantsFire = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || IsKeyDown(KEY_SPACE);
             if (wantsFire && fireCooldown <= 0.0f) {
@@ -412,6 +419,8 @@ int main(void) {
                 bulletCount = 0;
                 traceCount  = 0;
                 hasShotgun = false;
+                justUnlockedShotgun = false;
+                shotgunBannerTimer = 0.0f;
 
                 state = STATE_PLAYING;   
             }
@@ -477,6 +486,28 @@ int main(void) {
             }
 
             DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
+
+            // Upgrade banner 
+            if (shotgunBannerTimer > 0.0f || justUnlockedShotgun) {
+            const float duration = 1.5f;
+            float a = shotgunBannerTimer / duration;   // 0..1 ideally
+            if (a < 0.0f) a = 0.0f;
+            if (a > 1.0f) a = 1.0f;
+
+            // simple ease: fade in first 20%, hold, fade out last 20%
+            float alpha = (a < 0.2f) ? (a / 0.2f)
+                    : (a > 0.8f) ? ((1.0f - a) / 0.2f)
+                    : 1.0f;
+
+            const char *msg = "SHOTGUN UNLOCKED";
+            int fs = 28;
+            int w = MeasureText(msg, fs);
+            DrawText(msg, (SCREEN_W - w)/2, 80, fs, Fade(WHITE, alpha));
+
+            if (shotgunBannerTimer <= 0.0f) justUnlockedShotgun = false;
+        }
+
+
 
             // player (center) — flash while hurt
             Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
