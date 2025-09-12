@@ -572,7 +572,7 @@ int main(void) {
             DrawRectangle(0, 0, SCREEN_W, SCREEN_H, Fade(BLACK, 0.35f));
 
             // main message
-            const char *title = "PROCESS TERMINATED";
+            const char *title = "PR0CESS TERMINATED";
             int titleSize = 36;
             int titleW = MeasureText(title, titleSize);
             DrawText(title, (SCREEN_W - titleW)/2, SCREEN_H/2 - 40, titleSize, WHITE);
