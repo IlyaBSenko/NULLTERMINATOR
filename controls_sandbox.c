@@ -414,7 +414,6 @@ int main(void) {
             }
 
             // enemy to player
-            // enemy to player
             if (hurtTimer > 0.0f) hurtTimer -= dt;
 
             for (int ei = enemyCount - 1; ei >= 0; --ei) {
