@@ -6,6 +6,18 @@
 #include <math.h>   
 #include <stdio.h> 
 
+
+// top level
+static float EaseBanner(float a) {
+    if (a < 0.0f) a = 0.0f;
+    else if (a > 1.0f) a = 1.0f;
+
+    if (a < 0.2f) return a / 0.2f; // fade in
+    if (a > 0.8f) return (1.0f - a) / 0.2f; // fade out
+    return 1.0f; // hold
+}
+
+
 // high score
 static const char *HS_FILE = "highscore.txt";
 static int LoadHighScore(const char *path) {
@@ -486,132 +498,108 @@ int main(void) {
         BeginDrawing();
             ClearBackground(BLACK);
 
-            // draw traces
+            // --- Traces ---
             for (int i = 0; i < traceCount; ++i) {
-                float t = traces[i].life / TRACE_LIFE; // 1 to 0
-                float thickness = 3.0f * t + 1.0f; // start thicker, pause
-                // apply camera offset
+                float t = traces[i].life / TRACE_LIFE; // 1 -> 0
+                float thickness = 3.0f * t + 1.0f;
                 Vector2 A = (Vector2){ traces[i].a.x + cam.x, traces[i].a.y + cam.y };
                 Vector2 B = (Vector2){ traces[i].b.x + cam.x, traces[i].b.y + cam.y };
                 DrawLineEx(A, B, thickness, WHITE);
-                // small muzzle flash
-                DrawCircleV(A, 4.0f * t + 1.0f, WHITE);
+                DrawCircleV(A, 4.0f * t + 1.0f, WHITE); // muzzle flash
             }
 
+            // --- Bullets ---
             for (int i = 0; i < bulletCount; ++i) {
                 Vector2 p = { bullets[i].pos.x + cam.x, bullets[i].pos.y + cam.y };
                 DrawCircleV(p, BULLET_RADIUS, WHITE);
             }
 
-            // draw enemies with camera shake
+            // --- Enemies ---
             for (int i = 0; i < enemyCount; ++i) {
                 Vector2 p = { enemies[i].pos.x + cam.x, enemies[i].pos.y + cam.y };
                 DrawCircleV(p, ENEMY_RADIUS, WHITE);
             }
 
-            
+            // --- HUD: score + hearts + labels ---
+            {
+                const char *scoreText = TextFormat("Score: %d", score);
+                int fontSize = 18;
+                int scoreWidth = MeasureText(scoreText, fontSize);
+                int scoreX = SCREEN_W - scoreWidth - 16;
+                int scoreY = 12;
 
-            // HEARTS TOP RIGHT (FIX LATER)
-            const char *scoreText = TextFormat("Score: %d", score);
-            int fontSize = 18;
-            int scoreWidth = MeasureText(scoreText, fontSize);
-            int scoreX = SCREEN_W - scoreWidth - 16;
-            int scoreY = 12;
+                DrawText(scoreText, scoreX, scoreY, fontSize, WHITE);
+                DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
+                DrawText(TextFormat("High Score: %d", highScore), 16, 34, 18, WHITE);
 
-            DrawText(scoreText, scoreX, scoreY, fontSize, WHITE);
-
-            // hearts row, aligned to the right edge under the score
-            int heartsY = scoreY + fontSize + 6;
-            float s = HEART_SIZE;
-            for (int i = 0; i < HEARTS; ++i) {
-                // draw from right to left so the row hugs right margin
-                int idx = HEARTS - 1 - i;  // 2,1,0
-                int state = HeartStateFromHP(hp, idx);
-
-                float xRight = SCREEN_W - 16 - (i * (s + HEART_GAP));
-                Vector2 center = (Vector2){ xRight - s*0.5f, heartsY + s*0.4f };
-                DrawHeartIcon(center, s, state);
+                // hearts row (right-aligned under score)
+                int heartsY = scoreY + fontSize + 6;
+                float s = HEART_SIZE;
+                for (int i = 0; i < HEARTS; ++i) {
+                    int idx = HEARTS - 1 - i;  // 2,1,0
+                    int state = HeartStateFromHP(hp, idx);
+                    float xRight = SCREEN_W - 16 - (i * (s + HEART_GAP));
+                    Vector2 center = (Vector2){ xRight - s*0.5f, heartsY + s*0.4f };
+                    DrawHeartIcon(center, s, state);
+                }
             }
 
-            DrawText("Aim with mouse. Click to fire. ESC=Quit.", 16, 12, 18, WHITE);
-            DrawText(TextFormat("High Score: %d", highScore), 16, 34, 18, WHITE);
-
-
-            // Upgrade banner 
+            // --- Shotgun unlock banner ---
             if (shotgunBannerTimer > 0.0f || justUnlockedShotgun) {
-            const float duration = 1.5f;
-            float a = shotgunBannerTimer / duration;   // 0..1 ideally
-            if (a < 0.0f) a = 0.0f;
-            if (a > 1.0f) a = 1.0f;
+                const float duration = 1.5f;
+                float a = shotgunBannerTimer / duration;   // 0..1
+                float alpha = EaseBanner(a);
 
-            // simple ease: fade in first 20%, hold, fade out last 20%
-            float alpha = (a < 0.2f) ? (a / 0.2f)
-                    : (a > 0.8f) ? ((1.0f - a) / 0.2f)
-                    : 1.0f;
+                const char *msg = "SHOTGUN UNLOCKED";
+                int fs = 28;
+                int w = MeasureText(msg, fs);
+                DrawText(msg, (SCREEN_W - w)/2, 80, fs, Fade(WHITE, alpha));
 
-            const char *msg = "SHOTGUN UNLOCKED";
-            int fs = 28;
-            int w = MeasureText(msg, fs);
-            DrawText(msg, (SCREEN_W - w)/2, 80, fs, Fade(WHITE, alpha));
+                if (shotgunBannerTimer <= 0.0f) justUnlockedShotgun = false;
+            }
 
-            if (shotgunBannerTimer <= 0.0f) justUnlockedShotgun = false;
-        }
-
-
-
-            // player (center) — flash while hurt
-            Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
-            DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS, playerColor);
-            DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS - 2, BLACK);
-
+            // --- Player + crosshair ---
+            {
+                Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
+                DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS, playerColor);
+                DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS - 2, BLACK);
+            }
             DrawCrosshair(mouse);
 
+            // --- Game over overlay ---
             if (state == STATE_GAME_OVER) {
-            // OPTIONAL MAY REMOVE LATER - dim the screen a bit 
-            DrawRectangle(0, 0, SCREEN_W, SCREEN_H, Fade(BLACK, 0.35f));
+                DrawRectangle(0, 0, SCREEN_W, SCREEN_H, Fade(BLACK, 0.35f));
+                const char *title = "PR0CESS TERMINATED";
+                int titleSize = 36;
+                int titleW = MeasureText(title, titleSize);
+                DrawText(title, (SCREEN_W - titleW)/2, SCREEN_H/2 - 40, titleSize, WHITE);
 
-            // main message
-            const char *title = "PR0CESS TERMINATED";
-            int titleSize = 36;
-            int titleW = MeasureText(title, titleSize);
-            DrawText(title, (SCREEN_W - titleW)/2, SCREEN_H/2 - 40, titleSize, WHITE);
+                const char *sub = TextFormat("Score: %d   -   Press R to restart", score);
+                int subSize = 20;
+                int subW = MeasureText(sub, subSize);
+                DrawText(sub, (SCREEN_W - subW)/2, SCREEN_H/2 + 6, subSize, WHITE);
+            }
 
-            // subtext with score + prompt
-            const char *sub = TextFormat("Score: %d   -   Press R to restart", score);
-            int subSize = 20;
-            int subW = MeasureText(sub, subSize);
-            DrawText(sub, (SCREEN_W - subW)/2, SCREEN_H/2 + 6, subSize, WHITE);
-        }
+            // --- NEW HIGH SCORE banner ---
+            if (newHighBanner || newHighTimer > 0.0f) {
+                const float duration = 2.0f;         // must match start value
+                float a = newHighTimer / duration;   // 0..1
+                float alpha = EaseBanner(a);
 
-        // === NEW HIGH SCORE banner ===
-        if (newHighBanner || newHighTimer > 0.0f) {
-            const float duration = 2.0f;                   // must match the start value
-            float a = newHighTimer / duration;             // 0..1 as it counts down
-            if (a < 0.0f) a = 0.0f; if (a > 1.0f) a = 1.0f;
+                const char *msg = "NEW HIGH SCORE!";
+                int fs = 32;
+                int w  = MeasureText(msg, fs);
+                int x = (SCREEN_W - w)/2;
+                int y = 120;
+                DrawText(msg, x+2, y+2, fs, Fade(BLACK, alpha));  // shadow
+                DrawText(msg, x,   y,   fs, Fade(WHITE, alpha));
 
-            // ease: fade in first 20%, hold, fade out last 20%
-            float alpha = (a < 0.2f) ? (a / 0.2f)
-                        : (a > 0.8f) ? ((1.0f - a) / 0.2f)
-                        : 1.0f;
+                if (newHighTimer <= 0.0f) newHighBanner = false;
+            }
 
-            const char *msg = "NEW HIGH SCORE!";
-            int fs = 32;
-            int w  = MeasureText(msg, fs);
-
-            // put it a bit below the top-center; add a subtle drop-shadow
-            int x = (SCREEN_W - w)/2;
-            int y = 120;
-            DrawText(msg, x+2, y+2, fs, Fade(BLACK, alpha));  // shadow
-            DrawText(msg, x,   y,   fs, Fade(WHITE, alpha));
-
-            if (newHighTimer <= 0.0f) newHighBanner = false;
-        }
-
-
-
-            
         EndDrawing();
     }
+
 
     ShowCursor();
     CloseWindow();
