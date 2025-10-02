@@ -558,12 +558,20 @@ int main(void) {
                 if (shotgunBannerTimer <= 0.0f) justUnlockedShotgun = false;
             }
 
-            // --- Player + crosshair ---
+            // --- Player + and crosshair ---
             {
-                Color playerColor = (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) ? BLACK : WHITE;
+                Color playerColor;
+
+                if (hurtTimer > 0.0f && ((int)(hurtTimer * 20) % 2 == 0)) {
+                    playerColor = BLACK;
+                } else {
+                    playerColor = WHITE;
+                }
+
                 DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS, playerColor);
                 DrawCircleV((Vector2){player.x + cam.x, player.y + cam.y}, PLAYER_RADIUS - 2, BLACK);
             }
+
             DrawCrosshair(mouse);
 
             // --- Game over overlay ---
@@ -582,8 +590,8 @@ int main(void) {
 
             // --- NEW HIGH SCORE banner ---
             if (newHighBanner || newHighTimer > 0.0f) {
-                const float duration = 2.0f;         // must match start value
-                float a = newHighTimer / duration;   // 0..1
+                const float duration = 2.0f; // must match start value
+                float a = newHighTimer / duration; // 0..1
                 float alpha = EaseBanner(a);
 
                 const char *msg = "NEW HIGH SCORE!";
